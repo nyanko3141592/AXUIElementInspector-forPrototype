@@ -1,6 +1,14 @@
 import AppKit
 
+
 class InspectorWindow: NSPanel {
+    
+    var activeApplicationName: String = "" {
+       didSet {
+         activeApplicationNameLabel.stringValue = activeApplicationName
+       }
+     }
+    
   var elementTitle: String {
     get {
       elementTitleLabel.stringValue
@@ -51,6 +59,9 @@ class InspectorWindow: NSPanel {
     textView.documentView as! NSTextView
   }
 
+    
+    private let activeApplicationNameLabel = NSTextField(labelWithString: "")
+    
   init() {
     super.init(
       contentRect: .zero,
@@ -109,7 +120,16 @@ class InspectorWindow: NSPanel {
     documentView.textContainer?.widthTracksTextView = false
 
     rootView.addSubview(textView)
-
+      
+      activeApplicationNameLabel.translatesAutoresizingMaskIntoConstraints = false
+        activeApplicationNameLabel.font = NSFont.systemFont(ofSize: 12)
+        activeApplicationNameLabel.textColor = NSColor.secondaryLabelColor
+        rootView.addSubview(activeApplicationNameLabel)
+        
+        NSLayoutConstraint.activate([
+          activeApplicationNameLabel.topAnchor.constraint(equalTo: inspectedElementSectionLabel.topAnchor),
+          activeApplicationNameLabel.trailingAnchor.constraint(equalTo: inspectButton.leadingAnchor, constant: -12),
+        ])
     // Auto Layoutを設定
     NSLayoutConstraint.activate([
       inspectedElementSectionLabel.topAnchor.constraint(equalTo: rootView.topAnchor, constant: 12),

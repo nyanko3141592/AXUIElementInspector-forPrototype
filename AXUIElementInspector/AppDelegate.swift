@@ -1,11 +1,17 @@
 import Cocoa
 
+
 @main
 class AppDelegate: NSObject, NSApplicationDelegate {
   // OverlayWindowとInspectorWindowのインスタンスを生成
   lazy var overlayWindow = OverlayWindow()
   lazy var inspectorWindow = InspectorWindow()
 
+     var activeApplicationName: String = "" {
+       didSet {
+         inspectorWindow.activeApplicationName = activeApplicationName
+       }
+     }
   // 現在インスペクションが有効かどうかを管理するプロパティ
   var isInspectingEnabled: Bool = false {
     didSet {
@@ -151,6 +157,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // InspectorWindowにAXUIElementの情報を表示
     inspectorWindow.elementTitle = title(of: element)
     inspectorWindow.attributedText = inspect(element: element)
+  
+  let workspace = NSWorkspace.shared
+  let activeApplication = workspace.frontmostApplication
+  activeApplicationName = activeApplication?.localizedName ?? "Unknown"
   }
 
   private func waitPermisionGranted(completion: @escaping () -> Void) {
