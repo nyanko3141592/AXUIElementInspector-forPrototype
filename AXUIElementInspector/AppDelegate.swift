@@ -73,6 +73,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let workspace = NSWorkspace.shared
         let activeApplication = workspace.frontmostApplication
         let axMailApp = AXUIElementCreateApplication(activeApplication?.processIdentifier ?? 0)
+        print("Getting message from Mail app...")
         let axStaticText = findAXStaticText(in: axMailApp, withIdentifier: "message.from.0")
         if let axStaticText = axStaticText {
             var textValue: AnyObject?
