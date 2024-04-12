@@ -2,6 +2,9 @@ import Cocoa
 
 @main
 class AppDelegate: NSObject, NSApplicationDelegate {
+    // mailの時は常時取得する
+    var mailMessageFromTimer: Timer?
+
     // OverlayWindowとInspectorWindowのインスタンスを生成
     lazy var overlayWindow = OverlayWindow()
     lazy var inspectorWindow = InspectorWindow()
@@ -47,6 +50,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self.setup()
             }
         }
+
+        mailMessageFromTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            self.getMailMessageFrom()
+        }
+
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(applicationActivated),
+            name: NSWorkspace.didActivateApplicationNotification,
+            object: nil
+        )
     }
 
     private func setup() {
@@ -247,6 +261,45 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 self.waitPermisionGranted(completion: completion)
             }
+        }
+    }
+
+    private func getMailMessageFrom() {
+        let workspace = NSWorkspace.shared
+        let activeApplication = workspace.frontmostApplication
+        let activeApplicationName = activeApplication?.localizedName ?? ""
+
+        if activeApplicationName == "Mail" {
+            let axMailApp = AXUIElementCreateApplication(activeApplication?.processIdentifier ?? 0)
+            let axStaticText = findAXStaticText(in: axMailApp, withIdentifier: "message.from.0")
+            if let axStaticText = axStaticText {
+                var textValue: AnyObject?
+                AXUIElementCopyAttributeValue(
+                    axStaticText, kAXValueAttribute as CFString, &textValue)
+                if let textValue = textValue as? String {
+                    print("Message From: \(textValue)")
+                }
+            }
+        }
+    }
+    @objc private func applicationActivated(_ notification: Notification) {
+        guard
+            let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                as? NSRunningApplication
+        else {
+            return
+        }
+
+        if application.localizedName == "Mail" {
+            if mailMessageFromTimer == nil {
+                mailMessageFromTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) {
+                    _ in
+                    self.getMailMessageFrom()
+                }
+            }
+        } else {
+            mailMessageFromTimer?.invalidate()
+            mailMessageFromTimer = nil
         }
     }
 }
