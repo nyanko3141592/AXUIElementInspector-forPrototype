@@ -161,6 +161,81 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let workspace = NSWorkspace.shared
         let activeApplication = workspace.frontmostApplication
         activeApplicationName = activeApplication?.localizedName ?? "Unknown"
+
+        // Mailのとき
+        if activeApplicationName == "Mail" {
+            // 差出人のIDを取得する
+            let axStaticText = findAXStaticText(in: element, withIdentifier: "message.from.0")
+            if let axStaticText = axStaticText {
+                print("Found AXStaticText with identifier 'message.from.0'")
+
+                // AXStaticTextからテキストを取得
+                var textValue: AnyObject?
+                AXUIElementCopyAttributeValue(
+                    axStaticText, kAXValueAttribute as CFString, &textValue)
+                if let textValue = textValue as? String {
+                    print("Text value: \(textValue)")
+                }
+            }
+        }
+    }
+
+    private func findAXStaticText(in element: AXUIElement, withIdentifier identifier: String)
+        -> AXUIElement?
+    {
+        var result: AXUIElement?
+        let childrenCount = getAXChildren(of: element).count
+        for index in 0..<childrenCount {
+            guard let child = getAXChild(of: element, at: index) else { continue }
+
+            if getAXRole(of: child) == kAXStaticTextRole {
+                if getAXIdentifier(of: child) == identifier {
+                    result = child
+                    break
+                }
+            }
+
+            result = findAXStaticText(in: child, withIdentifier: identifier)
+            if result != nil {
+                break
+            }
+        }
+        return result
+    }
+
+    private func getAXChildren(of element: AXUIElement) -> [AXUIElement] {
+        var children: [AXUIElement] = []
+        var childrenCount = CFIndex(0)
+        AXUIElementGetAttributeValueCount(element, kAXChildrenAttribute as CFString, &childrenCount)
+
+        var childrenArray: AnyObject?
+        AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &childrenArray)
+        if let childrenArray = childrenArray as? [AXUIElement] {
+            children = childrenArray
+        }
+
+        return children
+    }
+
+    private func getAXChild(of element: AXUIElement, at index: Int) -> AXUIElement? {
+        var children: AnyObject?
+        AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &children)
+        if let children = children as? [AXUIElement], index >= 0 && index < children.count {
+            return children[index]
+        }
+        return nil
+    }
+
+    private func getAXRole(of element: AXUIElement) -> String {
+        var role: AnyObject?
+        AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role)
+        return role as? String ?? ""
+    }
+
+    private func getAXIdentifier(of element: AXUIElement) -> String {
+        var identifier: AnyObject?
+        AXUIElementCopyAttributeValue(element, kAXIdentifierAttribute as CFString, &identifier)
+        return identifier as? String ?? ""
     }
 
     private func waitPermisionGranted(completion: @escaping () -> Void) {
