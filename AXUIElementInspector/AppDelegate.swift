@@ -2,8 +2,8 @@ import Cocoa
 
 @main
 class AppDelegate: NSObject, NSApplicationDelegate {
-    var mailMessageFromTimer: Timer?
     var activeApplicationName: String = ""
+    var tap: CFMachPort!
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         // アクセシビリティの権限チェックを行う
@@ -18,20 +18,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self.setup()
             }
         }
-
-        NSWorkspace.shared.notificationCenter.addObserver(
-            self,
-            selector: #selector(applicationActivated),
-            name: NSWorkspace.didActivateApplicationNotification,
-            object: nil
-        )
     }
 
     private func setup() {
-        // タイマーを設定し、1秒ごとにアクティブなアプリケーションをチェックする
-        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            self.checkActiveApplication()
-        }
+        // CGEventTapを作成し、マウスイベントを監視
+        let mask: CGEventMask = (1 << CGEventType.mouseMoved.rawValue)
+        tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: mask,
+            callback: { (proxy, type, event, refcon) in
+                if let observer = refcon {
+                    let this = Unmanaged<AppDelegate>.fromOpaque(observer).takeUnretainedValue()
+                    this.mouseMoved()
+                }
+                return Unmanaged.passUnretained(event)
+            },
+            userInfo: UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
+        )
+
+        // CGEventTapをRunLoopに追加
+        let runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+        CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
+
+        // CGEventTapを有効化
+        CGEvent.tapEnable(tap: tap, enable: true)
     }
 
     private func waitPermissionGranted(completion: @escaping () -> Void) {
@@ -46,27 +58,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func checkActiveApplication() {
+    private func mouseMoved() {
         let workspace = NSWorkspace.shared
         let activeApplication = workspace.frontmostApplication
         activeApplicationName = activeApplication?.localizedName ?? "Unknown"
         print("Active application: \(activeApplicationName)")
 
         if activeApplicationName == "Mail" {
-            if mailMessageFromTimer == nil {
-                mailMessageFromTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) {
-                    _ in
-                    self.getMailMessageFrom()
-                }
-            }
-        } else {
-            mailMessageFromTimer?.invalidate()
-            mailMessageFromTimer = nil
+            getMailMessageFrom()
         }
     }
 
     private func getMailMessageFrom() {
-        print("Get message from")
         let workspace = NSWorkspace.shared
         let activeApplication = workspace.frontmostApplication
         let axMailApp = AXUIElementCreateApplication(activeApplication?.processIdentifier ?? 0)
@@ -79,6 +82,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
+
     private func findAXStaticText(in element: AXUIElement, withIdentifier identifier: String)
         -> AXUIElement?
     {
@@ -135,26 +139,5 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         var identifier: AnyObject?
         AXUIElementCopyAttributeValue(element, kAXIdentifierAttribute as CFString, &identifier)
         return identifier as? String ?? ""
-    }
-
-    @objc private func applicationActivated(_ notification: Notification) {
-        guard
-            let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
-                as? NSRunningApplication
-        else {
-            return
-        }
-
-        if application.localizedName == "Mail" {
-            if mailMessageFromTimer == nil {
-                mailMessageFromTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) {
-                    _ in
-                    self.getMailMessageFrom()
-                }
-            }
-        } else {
-            mailMessageFromTimer?.invalidate()
-            mailMessageFromTimer = nil
-        }
     }
 }
