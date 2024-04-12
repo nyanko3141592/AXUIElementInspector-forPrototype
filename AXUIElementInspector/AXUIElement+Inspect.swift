@@ -4,12 +4,14 @@ func inspect(element: AXUIElement, level: Int = 0) -> NSAttributedString {
   let description = NSMutableAttributedString()
 
   var roleValue: AnyObject?
+  // AXUIElementのrole属性を取得
   let roleValueError = AXUIElementCopyAttributeValue(
     element,
     kAXRoleAttribute as CFString,
     &roleValue
   )
   if let roleValue, roleValueError == .success {
+    // roleの値を太字のモノスペースフォントで表示
     description.append(
       NSAttributedString(
         string: "\(String(repeating: " ", count: level * 2))\(roleValue)\n",
@@ -19,18 +21,21 @@ func inspect(element: AXUIElement, level: Int = 0) -> NSAttributedString {
   }
 
   var attributeNames = CFArrayCreate(nil, nil, 0, nil)
+  // AXUIElementの属性名一覧を取得
   AXUIElementCopyAttributeNames(element, &attributeNames)
 
   if let attributeNames = attributeNames as? [String] {
     for attributeName in attributeNames {
       var attributeValue: AnyObject?
 
+      // 各属性の値を取得
       let attributeValueError = AXUIElementCopyAttributeValue(
         element,
         attributeName as CFString,
         &attributeValue
       )
       if attributeValueError == .success {
+        // 属性名を太字のモノスペースフォントで表示
         description.append(
           NSAttributedString(
             string: "\(String(repeating: " ", count: (level + 1) * 2))\(attributeName): ",
@@ -39,6 +44,7 @@ func inspect(element: AXUIElement, level: Int = 0) -> NSAttributedString {
         )
 
         let value = attributeValue as! AXValue
+        // 属性値の型に応じて表示方法を切り替える
         if AXValueGetType(value) == .cgPoint {
           var p = CGPoint()
           AXValueGetValue(value, .cgPoint, &p)
@@ -86,6 +92,7 @@ func inspect(element: AXUIElement, level: Int = 0) -> NSAttributedString {
           } else {
             if attributeName == kAXParentAttribute {
               var parentValue: AnyObject?
+              // 親要素のAXUIElementを取得
               let parentValueError = AXUIElementCopyAttributeValue(
                 element,
                 kAXParentAttribute as CFString,
@@ -93,6 +100,7 @@ func inspect(element: AXUIElement, level: Int = 0) -> NSAttributedString {
               )
               if let parentValue, parentValueError == .success {
                 var roleValue: AnyObject?
+                // 親要素のrole属性を取得
                 let roleValueError = AXUIElementCopyAttributeValue(
                   parentValue as! AXUIElement,
                   kAXRoleAttribute as CFString,
@@ -109,6 +117,7 @@ func inspect(element: AXUIElement, level: Int = 0) -> NSAttributedString {
               }
             } else if attributeName == kAXTopLevelUIElementAttribute {
               var topLevelUIElementValue: AnyObject?
+              // トップレベルのAXUIElementを取得
               let topLevelUIElementValueError = AXUIElementCopyAttributeValue(
                 element,
                 kAXTopLevelUIElementAttribute as CFString,
@@ -116,6 +125,7 @@ func inspect(element: AXUIElement, level: Int = 0) -> NSAttributedString {
               )
               if let topLevelUIElementValue, topLevelUIElementValueError == .success {
                 var roleValue: AnyObject?
+                // トップレベル要素のrole属性を取得
                 let roleValueError = AXUIElementCopyAttributeValue(
                   topLevelUIElementValue as! AXUIElement,
                   kAXRoleAttribute as CFString,
@@ -132,6 +142,7 @@ func inspect(element: AXUIElement, level: Int = 0) -> NSAttributedString {
               }
             } else {
               if let children = attributeValue as? [AXUIElement] {
+                // 子要素の配列からrole属性の値を取得し、表示
                 let roles = children.compactMap { (child) in
                   var roleValue: AnyObject?
                   let roleValueError = AXUIElementCopyAttributeValue(
@@ -152,6 +163,7 @@ func inspect(element: AXUIElement, level: Int = 0) -> NSAttributedString {
                   )
                 )
                 if level < 1 {
+                  // レベルが1未満の場合、再帰的に子要素を探索
                   for child in children {
                     let subDescription = inspect(element: child, level: level + 2)
                     description.append(subDescription)
@@ -179,6 +191,7 @@ func title(of element: AXUIElement) -> String {
   var components = [String]()
 
   var titleValue: AnyObject?
+  // AXUIElementのtitle属性を取得
   let titleValueError = AXUIElementCopyAttributeValue(
     element,
     kAXTitleAttribute as CFString,
@@ -192,6 +205,7 @@ func title(of element: AXUIElement) -> String {
   }
 
   var descriptionValue: AnyObject?
+  // AXUIElementのdescription属性を取得
   let descriptionValueError = AXUIElementCopyAttributeValue(
     element,
     kAXDescription as CFString,
@@ -205,6 +219,7 @@ func title(of element: AXUIElement) -> String {
   }
 
   var roleDescriptionValue: AnyObject?
+  // AXUIElementのroleDescription属性を取得
   let roleDescriptionValueError = AXUIElementCopyAttributeValue(
     element,
     kAXRoleDescriptionAttribute as CFString,
@@ -217,5 +232,6 @@ func title(of element: AXUIElement) -> String {
     }
   }
 
+  // title, description, roleDescriptionを", "で連結して返す
   return components.joined(separator: ", ")
 }

@@ -22,12 +22,14 @@ extension NSWindow.Position {
 
 extension NSWindow.Position {
   func value(forWindow windowRect: CGRect, inScreen screenRect: CGRect) -> CGPoint {
+    // 画面の幅に対するウィンドウの水平位置を計算
     let xPosition = horizontal.valueFor(
       screenRange: screenRect.minX..<screenRect.maxX,
       width: windowRect.width,
       padding: padding
     )
 
+    // 画面の高さに対するウィンドウの垂直位置を計算
     let yPosition = vertical.valueFor(
       screenRange: screenRect.minY..<screenRect.maxY,
       height: windowRect.height,
@@ -68,8 +70,11 @@ extension NSWindow.Position.Vertical {
 
 extension NSWindow {
   func setPosition(_ position: Position, in screen: NSScreen?) {
+    // 指定されたスクリーンの表示可能な領域を取得
     guard let visibleFrame = (screen ?? self.screen)?.visibleFrame else { return }
+    // ウィンドウの位置を計算
     let origin = position.value(forWindow: frame, inScreen: visibleFrame)
+    // ウィンドウの位置を設定
     setFrameOrigin(origin)
   }
 
@@ -79,6 +84,7 @@ extension NSWindow {
     padding: CGFloat = Position.defaultPadding,
     screen: NSScreen? = nil)
   {
+    // 垂直位置、水平位置、パディング、スクリーンを指定してウィンドウの位置を設定
     setPosition(
       Position(vertical: vertical, horizontal: horizontal, padding: padding),
       in: screen
