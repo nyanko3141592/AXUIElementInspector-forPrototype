@@ -64,42 +64,49 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         activeApplicationName = activeApplication?.localizedName ?? "Unknown"
         print("Active application: \(activeApplicationName)")
 
-        if activeApplicationName == "Mail" {
+        if activeApplicationName == "Slack" {
             getMailMessageFrom()
         }
     }
-
     private func getMailMessageFrom() {
         let workspace = NSWorkspace.shared
         let activeApplication = workspace.frontmostApplication
         let axMailApp = AXUIElementCreateApplication(activeApplication?.processIdentifier ?? 0)
         print("Getting message from Mail app...")
-        let axStaticText = findAXStaticText(in: axMailApp, withIdentifier: "message.from.0")
-        if let axStaticText = axStaticText {
+
+        let axButton = findAXButton(in: axMailApp, withTitle: "Takahashi Naoki")
+        if let axButton = axButton {
+            var textValue: AnyObject?
+            AXUIElementCopyAttributeValue(axButton, kAXTitleAttribute as CFString, &textValue)
+            if let textValue = textValue as? String {
+                print("Button Title: \(textValue)")
+            }
+        }
+
+        let axStaticTexts = findAXStaticTexts(in: axMailApp, withValues: ["...", "..."])
+        for (index, axStaticText) in axStaticTexts.enumerated() {
             var textValue: AnyObject?
             AXUIElementCopyAttributeValue(axStaticText, kAXValueAttribute as CFString, &textValue)
             if let textValue = textValue as? String {
-                print("Message From: \(textValue)")
+                print("Static Text \(index + 1) Value: \(textValue)")
             }
         }
     }
 
-    private func findAXStaticText(in element: AXUIElement, withIdentifier identifier: String)
-        -> AXUIElement?
-    {
+    private func findAXButton(in element: AXUIElement, withTitle title: String) -> AXUIElement? {
         var result: AXUIElement?
         let childrenCount = getAXChildren(of: element).count
         for index in 0..<childrenCount {
             guard let child = getAXChild(of: element, at: index) else { continue }
 
-            if getAXRole(of: child) == kAXStaticTextRole {
-                if getAXIdentifier(of: child) == identifier {
+            if getAXRole(of: child) == kAXButtonRole {
+                if getAXTitle(of: child) == title {
                     result = child
                     break
                 }
             }
 
-            result = findAXStaticText(in: child, withIdentifier: identifier)
+            result = findAXButton(in: child, withTitle: title)
             if result != nil {
                 break
             }
@@ -107,6 +114,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return result
     }
 
+    private func findAXStaticTexts(in element: AXUIElement, withValues values: [String])
+        -> [AXUIElement]
+    {
+        var results: [AXUIElement] = []
+        let childrenCount = getAXChildren(of: element).count
+        for index in 0..<childrenCount {
+            guard let child = getAXChild(of: element, at: index) else { continue }
+
+            if getAXRole(of: child) == kAXStaticTextRole {
+                if values.contains(getAXValue(of: child)) {
+                    results.append(child)
+                }
+            }
+
+            results.append(contentsOf: findAXStaticTexts(in: child, withValues: values))
+        }
+        return results
+    }
+
+    private func getAXValue(of element: AXUIElement) -> String {
+        var value: AnyObject?
+        AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &value)
+        return value as? String ?? ""
+    }
+    
     private func getAXChildren(of element: AXUIElement) -> [AXUIElement] {
         var children: [AXUIElement] = []
         var childrenCount = CFIndex(0)
@@ -140,5 +172,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         var identifier: AnyObject?
         AXUIElementCopyAttributeValue(element, kAXIdentifierAttribute as CFString, &identifier)
         return identifier as? String ?? ""
+    }
+
+    private func getAXTitle(of element: AXUIElement) -> String {
+        var title: AnyObject?
+        AXUIElementCopyAttributeValue(element, kAXTitleAttribute as CFString, &title)
+        return title as? String ?? ""
     }
 }
