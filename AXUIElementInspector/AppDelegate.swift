@@ -2,181 +2,139 @@ import Cocoa
 
 @main
 class AppDelegate: NSObject, NSApplicationDelegate {
+    // 現在アクティブなアプリケーションの名前を保持する変数
     var activeApplicationName: String = ""
-    var tap: CFMachPort!
+    // Slackアプリケーションを表すAXUIElement
+    var slackApp: AXUIElement!
 
+    // アプリケーションの起動時に呼ばれるメソッド
     func applicationDidFinishLaunching(_ aNotification: Notification) {
-        // アクセシビリティの権限チェックを行う
+        // AXIsProcessTrustedWithOptionsのオプションを設定（アクセス許可のプロンプトを表示）
         let trustedCheckOptionPrompt = kAXTrustedCheckOptionPrompt.takeRetainedValue() as NSString
         let options = [trustedCheckOptionPrompt: true] as CFDictionary
         if AXIsProcessTrustedWithOptions(options) {
-            // 権限がある場合はsetup()を呼び出す
+            // アクセス許可が与えられている場合、セットアップとアクティブアプリのモニタリングを開始
             setup()
+            monitorActiveApplication()
         } else {
-            // 権限がない場合は権限が付与されるまで待機し、付与されたらsetup()を呼び出す
+            // アクセス許可が与えられていない場合、許可が与えられるまで待つ
             waitPermissionGranted {
                 self.setup()
+                self.monitorActiveApplication()
             }
         }
     }
 
+    // セットアップメソッド
     private func setup() {
-        // CGEventTapを作成し、マウスイベントを監視
-        let mask: CGEventMask = (1 << CGEventType.mouseMoved.rawValue)
-        tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .defaultTap,
-            eventsOfInterest: mask,
-            callback: { (proxy, type, event, refcon) in
-                if let observer = refcon {
-                    let this = Unmanaged<AppDelegate>.fromOpaque(observer).takeUnretainedValue()
-                    this.mouseMoved()
-                }
-                return Unmanaged.passUnretained(event)
-            },
-            userInfo: UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
-        )
-
-        // CGEventTapをRunLoopに追加
-        let runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
-
-        // CGEventTapを有効化
-        CGEvent.tapEnable(tap: tap, enable: true)
-    }
-
-    private func waitPermissionGranted(completion: @escaping () -> Void) {
-        // 0.3秒後に権限チェックを行い、権限がある場合はcompletion()を呼び出す
-        // 権限がない場合は再度waitPermissionGranted()を呼び出す
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            if AXIsProcessTrusted() {
-                completion()
-            } else {
-                self.waitPermissionGranted(completion: completion)
-            }
+        // Slackアプリケーションを取得し、変数にセット
+        if let slackApp = getSlackApplication() {
+            self.slackApp = slackApp
+        } else {
+            // Slackが起動していない場合のエラーメッセージ
+            print("Slack is not running.")
         }
     }
 
-    private func mouseMoved() {
+    // SlackアプリケーションのAXUIElementを取得するメソッド
+    private func getSlackApplication() -> AXUIElement? {
         let workspace = NSWorkspace.shared
-        let activeApplication = workspace.frontmostApplication
-        activeApplicationName = activeApplication?.localizedName ?? "Unknown"
-        print("Active application: \(activeApplicationName)")
-
-        if activeApplicationName == "Slack" {
-            getMailMessageFrom()
-        }
-    }
-    private func getMailMessageFrom() {
-        let workspace = NSWorkspace.shared
-        let activeApplication = workspace.frontmostApplication
-        let axMailApp = AXUIElementCreateApplication(activeApplication?.processIdentifier ?? 0)
-        print("Getting message from Mail app...")
-
-        let axButton = findAXButton(in: axMailApp, withTitle: "Takahashi Naoki")
-        if let axButton = axButton {
-            var textValue: AnyObject?
-            AXUIElementCopyAttributeValue(axButton, kAXTitleAttribute as CFString, &textValue)
-            if let textValue = textValue as? String {
-                print("Button Title: \(textValue)")
+        let apps = workspace.runningApplications
+        for app in apps {
+            // アプリケーションの名前が「Slack」の場合、そのプロセスIDを使ってAXUIElementを作成
+            if app.localizedName == "Slack" {
+                return AXUIElementCreateApplication(app.processIdentifier)
             }
-        }
-
-        let axStaticTexts = findAXStaticTexts(in: axMailApp, withValues: ["...", "..."])
-        for (index, axStaticText) in axStaticTexts.enumerated() {
-            var textValue: AnyObject?
-            AXUIElementCopyAttributeValue(axStaticText, kAXValueAttribute as CFString, &textValue)
-            if let textValue = textValue as? String {
-                print("Static Text \(index + 1) Value: \(textValue)")
-            }
-        }
-    }
-
-    private func findAXButton(in element: AXUIElement, withTitle title: String) -> AXUIElement? {
-        var result: AXUIElement?
-        let childrenCount = getAXChildren(of: element).count
-        for index in 0..<childrenCount {
-            guard let child = getAXChild(of: element, at: index) else { continue }
-
-            if getAXRole(of: child) == kAXButtonRole {
-                if getAXTitle(of: child) == title {
-                    result = child
-                    break
-                }
-            }
-
-            result = findAXButton(in: child, withTitle: title)
-            if result != nil {
-                break
-            }
-        }
-        return result
-    }
-
-    private func findAXStaticTexts(in element: AXUIElement, withValues values: [String])
-        -> [AXUIElement]
-    {
-        var results: [AXUIElement] = []
-        let childrenCount = getAXChildren(of: element).count
-        for index in 0..<childrenCount {
-            guard let child = getAXChild(of: element, at: index) else { continue }
-
-            if getAXRole(of: child) == kAXStaticTextRole {
-                if values.contains(getAXValue(of: child)) {
-                    results.append(child)
-                }
-            }
-
-            results.append(contentsOf: findAXStaticTexts(in: child, withValues: values))
-        }
-        return results
-    }
-
-    private func getAXValue(of element: AXUIElement) -> String {
-        var value: AnyObject?
-        AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &value)
-        return value as? String ?? ""
-    }
-    
-    private func getAXChildren(of element: AXUIElement) -> [AXUIElement] {
-        var children: [AXUIElement] = []
-        var childrenCount = CFIndex(0)
-        AXUIElementGetAttributeValueCount(element, kAXChildrenAttribute as CFString, &childrenCount)
-
-        var childrenArray: AnyObject?
-        AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &childrenArray)
-        if let childrenArray = childrenArray as? [AXUIElement] {
-            children = childrenArray
-        }
-
-        return children
-    }
-
-    private func getAXChild(of element: AXUIElement, at index: Int) -> AXUIElement? {
-        var children: AnyObject?
-        AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &children)
-        if let children = children as? [AXUIElement], index >= 0 && index < children.count {
-            return children[index]
         }
         return nil
     }
 
-    private func getAXRole(of element: AXUIElement) -> String {
-        var role: AnyObject?
-        AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role)
-        return role as? String ?? ""
+    // Slackメッセージを取得するメソッド
+    private func fetchSlackMessages(from app: AXUIElement) {
+        print("Attempting to fetch Slack messages...")
+        var value: AnyObject?
+        // Slackアプリのウィンドウを取得
+        let result = AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value)
+        if result == .success, let windows = value as? [AXUIElement] {
+            for window in windows {
+                // 各ウィンドウからメッセージを抽出
+                extractMessagesFromWindow(window)
+            }
+        } else {
+            print("Could not retrieve Slack windows.")
+        }
     }
 
-    private func getAXIdentifier(of element: AXUIElement) -> String {
-        var identifier: AnyObject?
-        AXUIElementCopyAttributeValue(element, kAXIdentifierAttribute as CFString, &identifier)
-        return identifier as? String ?? ""
+    // ウィンドウからメッセージを抽出するメソッド
+    private func extractMessagesFromWindow(_ window: AXUIElement) {
+        var value: AnyObject?
+        // ウィンドウの子要素を取得
+        let result = AXUIElementCopyAttributeValue(window, kAXChildrenAttribute as CFString, &value)
+        if result == .success, let children = value as? [AXUIElement] {
+            for child in children {
+                // 各子要素からメッセージを抽出
+                extractMessagesFromElement(child)
+            }
+        } else {
+            print("Could not retrieve window children.")
+        }
     }
 
-    private func getAXTitle(of element: AXUIElement) -> String {
-        var title: AnyObject?
-        AXUIElementCopyAttributeValue(element, kAXTitleAttribute as CFString, &title)
-        return title as? String ?? ""
+    // 要素からメッセージを抽出するメソッド
+    private func extractMessagesFromElement(_ element: AXUIElement) {
+        var value: AnyObject?
+        // 要素の役割を取得
+        let result = AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &value)
+        if result == .success, let role = value as? String {
+            if role == kAXStaticTextRole as String {
+                // 要素が静的テキストの場合、その値を取得
+                var messageValue: AnyObject?
+                let messageResult = AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &messageValue)
+                if messageResult == .success, let message = messageValue as? String {
+                    print("Message: \(message)")
+                }
+            } else {
+                // 要素に子要素がある場合、それらを再帰的に処理
+                var childValue: AnyObject?
+                let childResult = AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &childValue)
+                if childResult == .success, let children = childValue as? [AXUIElement] {
+                    for child in children {
+                        extractMessagesFromElement(child)
+                    }
+                }
+            }
+        }
+    }
+
+    // アクティブなアプリケーションをモニタリングするメソッド
+    private func monitorActiveApplication() {
+        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            let workspace = NSWorkspace.shared
+            if let activeApp = workspace.frontmostApplication {
+                // アクティブアプリケーションが変わった場合、その名前を更新
+                if self.activeApplicationName != activeApp.localizedName {
+                    self.activeApplicationName = activeApp.localizedName ?? ""
+                    print("Active application: \(self.activeApplicationName)")
+                    // アクティブアプリがSlackの場合、メッセージを取得
+                    if self.activeApplicationName == "Slack" {
+                        if let slackApp = self.slackApp {
+                            self.fetchSlackMessages(from: slackApp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // アクセス許可が与えられるまで待つメソッド
+    private func waitPermissionGranted(completion: @escaping () -> Void) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            if AXIsProcessTrusted() {
+                completion()
+            } else {
+                // 許可が与えられるまで再帰的に呼び出す
+                self.waitPermissionGranted(completion: completion)
+            }
+        }
     }
 }
