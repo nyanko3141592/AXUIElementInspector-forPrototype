@@ -23,6 +23,36 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self.monitorActiveApplication()
             }
         }
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(activeAppDidChange(_:)), name: NSWorkspace.didActivateApplicationNotification, object: nil)
+                startMouseClickMonitoring()
+    }
+
+    @objc func activeAppDidChange(_ notification: Notification) {
+           if let activeApp = NSWorkspace.shared.frontmostApplication {
+               activeApplicationName = activeApp.localizedName!
+               print("Active app: \(activeApplicationName ?? "")")
+           }
+       }
+
+    func startMouseClickMonitoring() {
+        let mask = (1 << CGEventType.leftMouseDown.rawValue) | (1 << CGEventType.rightMouseDown.rawValue)
+        if let eventTap = CGEvent.tapCreate(tap: .cghidEventTap, place: .headInsertEventTap, options: .defaultTap, eventsOfInterest: CGEventMask(mask), callback: { (proxy, type, event, refcon) in
+            let delegate = Unmanaged<AppDelegate>.fromOpaque(refcon!).takeUnretainedValue()
+            delegate.mouseClicked()
+            return Unmanaged.passUnretained(event)
+        }, userInfo: UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())) {
+            let runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0)
+            CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
+            CGEvent.tapEnable(tap: eventTap, enable: true)
+        } else {
+            print("Failed to create event tap.")
+        }
+    }
+
+    func mouseClicked() {
+        if activeApplicationName == "Slack" {
+            fetchSlackMessages(from: slackApp)
+        }
     }
 
     // セットアップメソッド
