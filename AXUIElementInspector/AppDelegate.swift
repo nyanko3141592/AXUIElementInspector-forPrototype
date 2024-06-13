@@ -2,6 +2,7 @@ import Cocoa
 
 @main
 class AppDelegate: NSObject, NSApplicationDelegate {
+    let targetAppName: String = "Slack" // 監視対象のアプリケーション名
     var activeApplicationName: String = "" // 現在アクティブなアプリケーションの名前を保存する変数
     var slackApp: AXUIElement! // SlackアプリケーションのAXUIElementオブジェクト
     var observer: AXObserver? // AXObserverオブジェクト
@@ -14,12 +15,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // アクセシビリティの権限が許可されているか確認
         if AXIsProcessTrustedWithOptions(options) {
             setup() // 権限がある場合、初期設定を行う
-            monitorActiveApplication() // アクティブなアプリケーションを監視する
         } else {
             // 権限がない場合、権限が許可されるまで待つ
             waitPermissionGranted {
                 self.setup()
-                self.monitorActiveApplication()
             }
         }
         // アクティブなアプリケーションが変更されたときの通知を登録
@@ -31,6 +30,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let activeApp = NSWorkspace.shared.frontmostApplication {
             activeApplicationName = activeApp.localizedName! // 新しいアクティブなアプリケーションの名前を取得
             print("Active app: \(activeApplicationName)") // アクティブなアプリケーションの名前を出力
+            if activeApplicationName == targetAppName {
+                if let slackApp = slackApp {
+                    fetchSlackMessages(from: slackApp) // Slackがアクティブになった場合、メッセージを取得
+                }
+            }
         }
     }
 
@@ -49,7 +53,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let workspace = NSWorkspace.shared
         let apps = workspace.runningApplications
         for app in apps {
-            if app.localizedName == "Slack" {
+            if app.localizedName == targetAppName{
                 return AXUIElementCreateApplication(app.processIdentifier) // SlackアプリケーションのAXUIElementオブジェクトを返す
             }
         }
@@ -105,29 +109,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
-
-    // アクティブなアプリケーションを監視するメソッド
-    private func monitorActiveApplication() {
-        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            let workspace = NSWorkspace.shared
-            if let activeApp = workspace.frontmostApplication {
-                if self.activeApplicationName != activeApp.localizedName {
-                    self.activeApplicationName = activeApp.localizedName ?? ""
-                    print("Active application: \(self.activeApplicationName)") // アクティブなアプリケーションが変更された場合のメッセージ
-                    if self.activeApplicationName == "Slack" {
-                        if let slackApp = self.slackApp {
-                            self.fetchSlackMessages(from: slackApp) // Slackがアクティブになった場合、メッセージを取得
-                        }
-                    }
-                }
-            }
-        }
-    }
-
+    
     // Slackの監視を開始するメソッド
     private func startMonitoringSlack() {
-        guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.localizedName == "Slack" }) else {
-            print("Slack is not running.") // Slackが実行されていない場合のメッセージ
+        guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.localizedName == targetAppName }) else {
+            print("\(self.targetAppName)is not running.") // Slackが実行されていない場合のメッセージ
             return
         }
 
