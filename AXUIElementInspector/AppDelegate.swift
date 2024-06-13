@@ -30,7 +30,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func activeAppDidChange(_ notification: Notification) {
            if let activeApp = NSWorkspace.shared.frontmostApplication {
                activeApplicationName = activeApp.localizedName!
-               print("Active app: \(activeApplicationName ?? "")")
+               print("Active app: \(activeApplicationName)")
            }
        }
 
